@@ -14,6 +14,7 @@ class PipelineRun(Base):
     anomalies = Column(Text, nullable=True)
     profile = Column(Text, nullable=True)
     quality_score = Column(Integer, nullable=True)
+    processing_time_ms = Column(Integer, nullable=True)
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

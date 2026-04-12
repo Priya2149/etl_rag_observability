@@ -27,14 +27,23 @@ services:
     depends_on:
       - db
   
-  ui_service:
-    build: ./ui_service
-    container_name: ui_service
+  observability_service:
+    build: ./observability_service
+    container_name: observability_service
+    ports:
+      - "8002:8000"
+    depends_on:
+      - db
+
+  frontend:
+    build: ./frontend
+    container_name: frontend
     ports:
       - "8501:8501"
     depends_on:
       - etl_service
       - rag_service
+      - observability_service
 
 volumes:
   postgres_data:

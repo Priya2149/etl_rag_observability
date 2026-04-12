@@ -19,12 +19,20 @@ class RagQueryRun(Base):
     query = Column(Text, nullable=False)
     answer = Column(Text, nullable=True)
     retrieved_chunks = Column(Text, nullable=True)
+
+    # Core fields used by UI + observability
+    sources = Column(Text, nullable=True)
+    chunks_used = Column(Integer, nullable=True)
+    processing_time_ms = Column(Integer, nullable=True)
+
+    # Advanced retrieval / evaluation fields
     retrieved_count = Column(Integer, nullable=True)
     source_files = Column(Text, nullable=True)
     best_distance = Column(Float, nullable=True)
     risk_level = Column(String, nullable=True)
     evaluation_status = Column(String, nullable=True)
     warning_flags = Column(Text, nullable=True)
+
     status = Column(String, default="completed")
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

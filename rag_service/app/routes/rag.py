@@ -85,3 +85,23 @@ def get_runs(db: Session = Depends(get_db)):
         }
         for run in runs
     ]
+
+@router.get("/runs/{run_id}")
+def get_run_details(run_id: int, db: Session = Depends(get_db)):
+    run = db.query(RagQueryRun).filter(RagQueryRun.id == run_id).first()
+
+    if not run:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    return {
+        "id": run.id,
+        "query": run.query,
+        "answer": run.answer,
+        "status": run.status,
+        "chunks_used": run.chunks_used,
+        "processing_time_ms": run.processing_time_ms,
+        "sources": json.loads(run.sources) if run.sources else [],
+        "retrieved_chunks": json.loads(run.retrieved_chunks) if run.retrieved_chunks else [],
+        "error_message": run.error_message,
+        "created_at": run.created_at
+    }
