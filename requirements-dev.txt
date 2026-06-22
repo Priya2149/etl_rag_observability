@@ -1,0 +1,9 @@
+pytest
+pytest-cov
+httpx
+pytest-mock
+ruff
+mypy
+requests
+playwright
+pytest-playwright
