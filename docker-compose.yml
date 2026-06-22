@@ -18,6 +18,11 @@ services:
       - "8000:8000"
     depends_on:
       - db
+    healthcheck:
+    test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health').raise_for_status()"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
 
   rag_service:
     build: ./rag_service
@@ -26,6 +31,11 @@ services:
       - "8001:8000"
     depends_on:
       - db
+    healthcheck:
+    test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health').raise_for_status()"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
   
   observability_service:
     build: ./observability_service
@@ -34,7 +44,12 @@ services:
       - "8002:8000"
     depends_on:
       - db
-  
+    healthcheck:
+    test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health').raise_for_status()"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+
   agent_service:
     build: ./agent_service
     container_name: agent_service
@@ -44,7 +59,12 @@ services:
       - db
       - etl_service
       - rag_service
-
+  healthcheck:
+    test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health').raise_for_status()"]
+    interval: 30s
+    timeout: 10s
+    retries: 3
+    
   frontend:
     build: ./frontend
     container_name: frontend

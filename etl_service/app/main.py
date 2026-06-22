@@ -11,3 +11,7 @@ app.include_router(upload.router)
 @app.get("/")
 def root():
     return {"message": "ETL Service Running"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}

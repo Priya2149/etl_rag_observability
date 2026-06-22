@@ -11,3 +11,7 @@ app.include_router(rag.router)
 @app.get("/")
 def root():
     return {"message": "RAG Service Running"}
+
+@app.get("/health")
+def health_check():
+    return {"status": "healthy"}

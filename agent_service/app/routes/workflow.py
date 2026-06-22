@@ -6,6 +6,7 @@ from app.db import get_db
 from app.models import WorkflowRun, WorkflowStep
 from app.schemas import WorkflowRequest
 from app.services.orchestrator import run_workflow, continue_after_approval
+from app.services.langgraph_workflow import run_langgraph_until_approval, run_langgraph_report
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
 
@@ -153,4 +154,67 @@ def retry_workflow(workflow_id: int, db: Session = Depends(get_db)):
         "workflow_id": workflow.id,
         "status": workflow.status,
         "current_step": workflow.current_step,
+    }
+@router.post("/workflow/langgraph")
+def create_langgraph_workflow(request: WorkflowRequest, db: Session = Depends(get_db)):
+    workflow = WorkflowRun(
+        workflow_name="langgraph_etl_rag_workflow",
+        status="running",
+        current_step="planning",
+        input_payload=json.dumps(request.dict()),
+    )
+
+    db.add(workflow)
+    db.commit()
+    db.refresh(workflow)
+
+    try:
+        state = run_langgraph_until_approval(request.dict())
+
+        workflow.status = state.get("status", "waiting_for_approval")
+        workflow.current_step = state.get("current_step", "human_review")
+
+        db.commit()
+
+        return {
+            "workflow_id": workflow.id,
+            "engine": "langgraph",
+            "status": workflow.status,
+            "current_step": workflow.current_step,
+            "state": state,
+        }
+
+    except Exception as e:
+        workflow.status = "failed"
+        workflow.error_message = str(e)
+        db.commit()
+
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/workflow/{workflow_id}/langgraph/approve")
+def approve_langgraph_workflow(workflow_id: int, db: Session = Depends(get_db)):
+    workflow = db.query(WorkflowRun).filter(WorkflowRun.id == workflow_id).first()
+
+    if not workflow:
+        raise HTTPException(status_code=404, detail="Workflow not found")
+
+    if workflow.status != "waiting_for_approval":
+        raise HTTPException(status_code=400, detail="Workflow is not waiting for approval")
+
+    input_payload = json.loads(workflow.input_payload) if workflow.input_payload else {}
+    state = run_langgraph_until_approval(input_payload)
+    final_state = run_langgraph_report(state)
+
+    workflow.status = "completed"
+    workflow.current_step = "finished"
+    workflow.final_output = json.dumps(final_state.get("final_report"))
+
+    db.commit()
+
+    return {
+        "workflow_id": workflow.id,
+        "engine": "langgraph",
+        "status": workflow.status,
+        "final_output": final_state.get("final_report"),
     }

@@ -1,0 +1,33 @@
+name: Tests
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install service dependencies
+        run: |
+          pip install -r etl_service/requirements.txt
+          pip install -r rag_service/requirements.txt
+          pip install -r agent_service/requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run lint
+        run: ruff check .
+
+      - name: Run tests
+        run: pytest --cov=etl_service --cov=rag_service --cov=agent_service --cov-report=term-missing
