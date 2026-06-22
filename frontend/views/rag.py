@@ -9,6 +9,7 @@ from api.client import (
     get_rag_runs,
     upload_document,
 )
+from components.detail_views import render_rag_details
 from components.rag_answer import show_rag_answer
 from components.tables import render_table
 
@@ -41,7 +42,7 @@ def render_rag() -> None:
         st.markdown('<div class="section-card">', unsafe_allow_html=True)
         st.markdown('<div class="section-title">Ask a Question</div>', unsafe_allow_html=True)
         st.markdown(
-            '<div class="section-subtitle">Query the RAG pipeline and inspect retrieved context</div>',
+            '<div class="section-subtitle">Query the RAG pipeline and inspect retrieval quality signals</div>',
             unsafe_allow_html=True,
         )
 
@@ -99,7 +100,7 @@ def render_rag() -> None:
 
                 if st.button("View RAG Run Details", key="rag_details_button"):
                     details = get_rag_run_details(selected_run_id)
-                    show_rag_answer(details)
+                    render_rag_details(details)
 
         except Exception as e:
             st.error(f"Failed to fetch RAG runs: {e}")

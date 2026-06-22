@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, Float
 from datetime import datetime
 from app.db import Base
 
+
 class RagDocument(Base):
     __tablename__ = "rag_documents"
 
@@ -20,7 +21,7 @@ class RagQueryRun(Base):
     answer = Column(Text, nullable=True)
     retrieved_chunks = Column(Text, nullable=True)
 
-    # Core fields used by UI + observability
+    # Core fields used in UI + observability
     sources = Column(Text, nullable=True)
     chunks_used = Column(Integer, nullable=True)
     processing_time_ms = Column(Integer, nullable=True)

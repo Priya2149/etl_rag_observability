@@ -8,6 +8,37 @@ from config.settings import ETL_BASE_URL, RAG_BASE_URL, OBS_BASE_URL
 
 TIMEOUT_SECONDS = 60
 
+AGENT_BASE_URL = "http://agent_service:8000"
+
+
+def create_agent_workflow(dataset_id=None, question=None):
+    payload = {
+        "dataset_id": dataset_id,
+        "question": question,
+    }
+
+    response = requests.post(
+        f"{AGENT_BASE_URL}/agent/workflow",
+        json=payload,
+        timeout=TIMEOUT_SECONDS,
+    )
+    return _handle_response(response)
+
+
+def get_agent_workflow(workflow_id: int):
+    response = requests.get(
+        f"{AGENT_BASE_URL}/agent/workflow/{workflow_id}",
+        timeout=TIMEOUT_SECONDS,
+    )
+    return _handle_response(response)
+
+
+def approve_agent_workflow(workflow_id: int):
+    response = requests.post(
+        f"{AGENT_BASE_URL}/agent/workflow/{workflow_id}/approve",
+        timeout=TIMEOUT_SECONDS,
+    )
+    return _handle_response(response)
 
 def _handle_response(response: requests.Response) -> Any:
     response.raise_for_status()
@@ -104,6 +135,29 @@ def get_rag_summary() -> Any:
 def get_recent_failures() -> Any:
     response = requests.get(
         f"{OBS_BASE_URL}/observability/recent-failures",
+        timeout=TIMEOUT_SECONDS,
+    )
+    return _handle_response(response)
+
+def list_agent_workflows():
+    response = requests.get(
+        f"{AGENT_BASE_URL}/agent/workflows",
+        timeout=TIMEOUT_SECONDS,
+    )
+    return _handle_response(response)
+
+
+def reject_agent_workflow(workflow_id: int):
+    response = requests.post(
+        f"{AGENT_BASE_URL}/agent/workflow/{workflow_id}/reject",
+        timeout=TIMEOUT_SECONDS,
+    )
+    return _handle_response(response)
+
+
+def retry_agent_workflow(workflow_id: int):
+    response = requests.post(
+        f"{AGENT_BASE_URL}/agent/workflow/{workflow_id}/retry",
         timeout=TIMEOUT_SECONDS,
     )
     return _handle_response(response)

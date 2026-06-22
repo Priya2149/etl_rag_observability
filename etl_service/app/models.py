@@ -2,6 +2,7 @@ from sqlalchemy import Column, Integer, String, DateTime, Text
 from datetime import datetime
 from app.db import Base
 
+
 class PipelineRun(Base):
     __tablename__ = "pipeline_runs"
 

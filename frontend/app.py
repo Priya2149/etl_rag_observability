@@ -8,7 +8,7 @@ from views.failures import render_failures
 from views.overview import render_overview
 from views.rag import render_rag
 from styles.theme import apply_theme
-
+from views.agents import render_agent_workflows
 
 st.set_page_config(
     page_title=APP_TITLE,
@@ -30,7 +30,7 @@ st.markdown(
 
 menu = st.sidebar.radio(
     "Navigation",
-    ["Overview", "ETL", "RAG", "Failures"],
+    ["Overview", "ETL", "RAG", "Failures", "Agents"],
 )
 
 st.sidebar.markdown("---")
@@ -45,3 +45,5 @@ elif menu == "RAG":
     render_rag()
 elif menu == "Failures":
     render_failures()
+elif menu == "Agents":
+    render_agent_workflows()

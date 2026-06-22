@@ -1,8 +1,12 @@
+import time
 import pandas as pd
 from app.utils.anomaly import detect_anomalies, calculate_quality_score
 from app.services.profiler import profile_dataset
 
+
 def process_data(file_path: str):
+    start_time = time.perf_counter()
+
     df = pd.read_csv(file_path)
 
     original_rows = len(df)
@@ -17,6 +21,8 @@ def process_data(file_path: str):
     df = df.drop_duplicates()
     df = df.fillna("UNKNOWN")
 
+    processing_time_ms = int((time.perf_counter() - start_time) * 1000)
+
     summary = {
         "total_rows": len(df),
         "total_columns": original_columns,
@@ -30,4 +36,5 @@ def process_data(file_path: str):
         "anomalies": anomalies,
         "profile": profile,
         "quality_score": quality_score,
+        "processing_time_ms": processing_time_ms,
     }

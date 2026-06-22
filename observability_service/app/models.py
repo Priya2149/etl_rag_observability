@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Text
+from sqlalchemy import Column, Integer, String, DateTime, Text, Float
 from app.db import Base
 
 
@@ -37,9 +37,18 @@ class RagQueryRun(Base):
     query = Column(Text)
     answer = Column(Text)
     retrieved_chunks = Column(Text)
+
     sources = Column(Text)
     chunks_used = Column(Integer)
     processing_time_ms = Column(Integer)
+
+    retrieved_count = Column(Integer)
+    source_files = Column(Text)
+    best_distance = Column(Float)
+    risk_level = Column(String)
+    evaluation_status = Column(String)
+    warning_flags = Column(Text)
+
     status = Column(String)
     error_message = Column(Text)
     created_at = Column(DateTime)

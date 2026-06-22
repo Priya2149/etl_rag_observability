@@ -22,12 +22,12 @@ def process_pipeline_run(run_id: int):
         db.commit()
 
         result = process_data(run.filepath)
-
         run.total_rows = result["summary"]["total_rows"]
         run.total_columns = result["summary"]["total_columns"]
         run.anomalies = json.dumps(result["anomalies"])
         run.profile = json.dumps(result["profile"])
         run.quality_score = result["quality_score"]
+        run.processing_time_ms = result["processing_time_ms"]
         run.status = "completed"
         db.commit()
 
@@ -84,6 +84,7 @@ def get_runs(db: Session = Depends(get_db)):
             "total_rows": run.total_rows,
             "total_columns": run.total_columns,
             "quality_score": run.quality_score,
+            "processing_time_ms": run.processing_time_ms,
             "created_at": run.created_at,
             "updated_at": run.updated_at
         }
@@ -99,13 +100,14 @@ def get_run_details(run_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Run not found")
 
     return {
-        "id": run.id,
+ "id": run.id,
         "filename": run.filename,
         "filepath": run.filepath,
         "status": run.status,
         "total_rows": run.total_rows,
         "total_columns": run.total_columns,
         "quality_score": run.quality_score,
+        "processing_time_ms": run.processing_time_ms,
         "anomalies": json.loads(run.anomalies) if run.anomalies else None,
         "profile": json.loads(run.profile) if run.profile else None,
         "error_message": run.error_message,

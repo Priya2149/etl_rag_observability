@@ -3,7 +3,7 @@ from __future__ import annotations
 import streamlit as st
 
 from api.client import get_etl_run_details, get_etl_runs, upload_csv
-from components.metrics import metric_card
+from components.detail_views import render_etl_details
 from components.tables import render_table
 
 
@@ -49,21 +49,7 @@ def render_etl() -> None:
 
                 if st.button("View ETL Run Details", key="etl_details_button"):
                     details = get_etl_run_details(selected_run_id)
-
-                    row = st.columns(3)
-                    with row[0]:
-                        metric_card("Quality Score", details.get("quality_score", "-"), "Overall dataset quality")
-                    with row[1]:
-                        metric_card("Rows", details.get("total_rows", "-"), "Processed row count")
-                    with row[2]:
-                        metric_card(
-                            "Processing Time (ms)",
-                            details.get("processing_time_ms", "-"),
-                            "ETL execution time",
-                        )
-
-                    st.markdown("#### Run Details")
-                    st.json(details)
+                    render_etl_details(details)
 
         except Exception as e:
             st.error(f"Failed to fetch ETL runs: {e}")

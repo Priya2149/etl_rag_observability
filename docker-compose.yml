@@ -34,6 +34,16 @@ services:
       - "8002:8000"
     depends_on:
       - db
+  
+  agent_service:
+    build: ./agent_service
+    container_name: agent_service
+    ports:
+      - "8003:8000"
+    depends_on:
+      - db
+      - etl_service
+      - rag_service
 
   frontend:
     build: ./frontend
@@ -44,6 +54,7 @@ services:
       - etl_service
       - rag_service
       - observability_service
+      - agent_service
 
 volumes:
   postgres_data:

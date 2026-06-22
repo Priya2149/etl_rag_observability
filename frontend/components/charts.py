@@ -38,3 +38,11 @@ def line_chart(df: pd.DataFrame, x: str, y: str, title: str, x_title: str = "", 
     fig = px.line(df, x=x, y=y, title=title, markers=True)
     fig.update_layout(xaxis_title=x_title, yaxis_title=y_title)
     return _base_layout(fig)
+
+
+def should_render_chart(df: pd.DataFrame, y_col: str) -> bool:
+    if df.empty or y_col not in df.columns:
+        return False
+
+    non_null = df[y_col].dropna()
+    return len(non_null) > 0
