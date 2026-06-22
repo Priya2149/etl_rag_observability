@@ -1,21 +1,15 @@
 import json
 import time
 
-from app.models import (
-    WorkflowStep
-)
+from app.models import WorkflowStep
+from app.services.planner_agent import run_planner
+from app.services.etl_agent import run_etl_agent
+from app.services.rag_agent import run_rag_agent
+from app.services.evaluator_agent import run_evaluator
+from app.services.report_agent import build_report
+from app.services.tool_client import get_etl_run_details, ask_rag_service
 
-from app.services.planner_agent import (
-    run_planner
-)
 
-from app.services.evaluator_agent import (
-    run_evaluator
-)
-
-from app.services.report_agent import (
-    build_report
-)
 def add_step(
     db,
     workflow_id,
@@ -59,34 +53,44 @@ def run_workflow(db, workflow):
             int((time.perf_counter() - start) * 1000),
         )
 
-        # This should be replaced with your real ETL/RAG service calls
-        rag_result = {
-            "chunks_used": 1,
-            "retrieved_count": 1,
-            "risk_level": "low",
-            "answer": "Workflow prepared for human review."
-        }
+        start = time.perf_counter()
+        etl_result = run_etl_agent(payload, get_etl_run_details)
+        add_step(
+            db,
+            workflow.id,
+            "etl_agent",
+            "etl_context_fetch",
+            etl_result.get("status", "completed"),
+            payload,
+            etl_result,
+            int((time.perf_counter() - start) * 1000),
+        )
 
+        start = time.perf_counter()
+        rag_result = run_rag_agent(payload, ask_rag_service)
         add_step(
             db,
             workflow.id,
             "rag_agent",
-            "retrieval",
-            "completed",
+            "rag_retrieval",
+            rag_result.get("status", "completed"),
             payload,
             rag_result,
-            50,
+            int((time.perf_counter() - start) * 1000),
         )
 
         start = time.perf_counter()
-        evaluation_result = run_evaluator(rag_result)
+        evaluation_result = run_evaluator(etl_result, rag_result)
         add_step(
             db,
             workflow.id,
             "evaluator_agent",
             "evaluation",
             "completed",
-            rag_result,
+            {
+                "etl_result": etl_result,
+                "rag_result": rag_result,
+            },
             evaluation_result,
             int((time.perf_counter() - start) * 1000),
         )
@@ -121,21 +125,27 @@ def continue_after_approval(db, workflow):
         .all()
     )
 
-    planner_result = None
-    rag_result = None
-    evaluation_result = None
+    planner_result = {}
+    etl_result = {}
+    rag_result = {}
+    evaluation_result = {}
 
     for step in steps:
+        output = json.loads(step.output_payload) if step.output_payload else {}
+
         if step.step_name == "planning":
-            planner_result = json.loads(step.output_payload) if step.output_payload else {}
-        elif step.step_name == "retrieval":
-            rag_result = json.loads(step.output_payload) if step.output_payload else {}
+            planner_result = output
+        elif step.step_name == "etl_context_fetch":
+            etl_result = output
+        elif step.step_name == "rag_retrieval":
+            rag_result = output
         elif step.step_name == "evaluation":
-            evaluation_result = json.loads(step.output_payload) if step.output_payload else {}
+            evaluation_result = output
 
     start = time.perf_counter()
     final_report = build_report(
         planner_result=planner_result,
+        etl_result=etl_result,
         rag_result=rag_result,
         evaluation_result=evaluation_result,
     )
@@ -148,6 +158,7 @@ def continue_after_approval(db, workflow):
         "completed",
         {
             "planner_result": planner_result,
+            "etl_result": etl_result,
             "rag_result": rag_result,
             "evaluation_result": evaluation_result,
         },
