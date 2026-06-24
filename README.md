@@ -144,18 +144,6 @@ Observability Service
 
 ---
 
-## Screenshots
-
-Add screenshots here:
-
-- Overview dashboard
-- ETL run details
-- RAG response with retrieved chunks
-- Agent workflow trace
-- Failure monitoring page
-
----
-
 ## Project Status
 
 This is an ongoing personal project focused on backend engineering, data pipeline reliability, RAG observability, and agentic workflow orchestration.
