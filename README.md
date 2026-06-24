@@ -1,99 +1,161 @@
 # ETL-RAG Observability Platform
 
-This is an ongoing backend-focused project for running ETL pipelines and RAG-based document workflows, with built-in run tracking and observability.
+A personal full-stack project for monitoring ETL pipelines, RAG workflows, and agent-based workflow execution.
+
+I built this project to practice modern backend, data, and AI engineering concepts in one system. The main goal is to show how structured data pipelines and AI retrieval workflows can be tracked, evaluated, and reviewed through a simple dashboard.
 
 ---
 
-## Overview
+## Problem
 
-This project handles both structured and unstructured data workflows through APIs and tracks how those workflows execute.
+Data and AI workflows can fail in ways that are not always obvious.
 
-It includes:
+Examples:
+- an ETL pipeline may complete but still produce poor-quality data
+- a RAG system may return an answer using weak or irrelevant retrieved context
+- workflow failures may be hard to trace across multiple services
 
-- an ETL pipeline for processing CSV datasets  
-- a RAG pipeline for querying document data  
-- run tracking and metadata storage for observability  
-
-The system is designed to execute data workflows and provide visibility into their results and behavior.
-
----
-
-## Features
-
-### ETL Pipeline (Structured Data)
-
-- Upload CSV datasets via API  
-- Perform schema profiling (columns, types, missing values)  
-- Detect anomalies and compute data quality metrics  
-- Store pipeline run results in PostgreSQL  
-- Execute processing in the background with run status tracking  
+This project explores how these workflows can be monitored with run history, quality signals, risk flags, and step-level traces.
 
 ---
 
-### RAG Pipeline (Unstructured Data)
+## Key Features
 
-- Upload text documents for ingestion  
-- Chunk and embed documents using sentence-transformers  
-- Store embeddings in ChromaDB  
-- Perform semantic search based on user queries  
-- Return relevant document context as responses  
-- Store query runs and retrieved chunks  
+### ETL Pipeline
 
----
+- Upload and process CSV datasets
+- Profile columns, data types, missing values, and unique values
+- Detect basic anomalies in datasets
+- Calculate data quality scores
+- Track ETL run status, timing, and metadata
 
-### Run Tracking & Observability
+### RAG Pipeline
 
-- Track execution status (`pending`, `processing`, `completed`, `failed`)  
-- Store processing time for each run  
-- Capture metadata such as:
-  - retrieved chunks  
-  - source documents  
-  - anomaly summaries  
-- Access historical runs through API endpoints  
+- Upload text documents for retrieval
+- Chunk and embed documents
+- Store embeddings in ChromaDB
+- Query documents using semantic retrieval
+- Track retrieved chunks, sources, timing, and warning flags
+
+### Observability Dashboard
+
+- View ETL and RAG activity in one dashboard
+- Track health scores, failures, and high-risk queries
+- Review processing-time and quality trends
+- Drill into individual ETL and RAG runs
+
+### Agentic Workflow Layer
+
+- Coordinate ETL and RAG workflows through an agent service
+- Track planner, ETL, RAG, evaluator, and report steps
+- Support human approval, reject, and retry flow
+- Add a LangGraph-based workflow path for agent orchestration
 
 ---
 
 ## Architecture
 
-The system is organized as microservices:
-
-- **ETL Service** – handles structured data processing  
-- **RAG Service** – handles document ingestion and retrieval  
-- **PostgreSQL** – stores run data and metadata  
-
-Each service runs independently and exposes REST APIs.
+```text
+Streamlit Dashboard
+        |
+        v
+Observability Service
+        |
+        +--> ETL Service
+        |
+        +--> RAG Service
+        |
+        +--> Agent Service
+                |
+                +--> Planner Agent
+                +--> ETL Agent
+                +--> RAG Agent
+                +--> Evaluator Agent
+                +--> Human Approval
+                +--> Report Agent
+```
 
 ---
 
 ## Tech Stack
 
-- **Backend:** FastAPI (Python)  
-- **Data Processing:** Pandas  
-- **RAG:** LangChain, ChromaDB, Sentence Transformers  
-- **Database:** PostgreSQL  
-- **Containerization:** Docker, Docker Compose  
+### Backend
+- Python
+- FastAPI
+- SQLAlchemy
+- PostgreSQL
+- Pandas
+
+### AI / Data
+- LangChain
+- LangGraph
+- ChromaDB
+- Sentence Transformers
+
+### Frontend
+- Streamlit
+- Plotly
+- Pandas
+
+### Tooling
+- Docker
+- Docker Compose
+- Pytest
+- Ruff
+- Playwright
 
 ---
 
-## API Overview
+## What This Project Shows
 
-### ETL Service
+### Backend Engineering
+- FastAPI service design
+- REST API development
+- PostgreSQL data persistence
+- Background processing
+- Error handling and status tracking
 
-- `POST /etl/upload` – Upload and process dataset  
-- `GET /etl/runs` – List pipeline runs  
-- `GET /etl/runs/{id}` – Get detailed run information  
+### Data Engineering
+- CSV ingestion
+- ETL-style processing
+- Data profiling
+- Data quality checks
+- Anomaly detection
+
+### AI Engineering
+- RAG workflow implementation
+- Vector search
+- Retrieval metadata tracking
+- Basic retrieval risk evaluation
+- LangGraph workflow experimentation
+
+### Platform / Observability
+- Microservice-based design
+- Run tracking across services
+- Health score calculation
+- Failure monitoring
+- Agent workflow tracing
+
+### Testing
+- Unit tests for ETL, RAG, and agent logic
+- API health checks
+- Frontend smoke tests
+- Linting and coverage setup
 
 ---
 
-### RAG Service
+## Screenshots
 
-- `POST /rag/upload` – Upload document  
-- `POST /rag/ask` – Query documents  
-- `GET /rag/runs` – List query runs  
-- `GET /rag/runs/{id}` – Get query run details  
+Add screenshots here:
+
+- Overview dashboard
+- ETL run details
+- RAG response with retrieved chunks
+- Agent workflow trace
+- Failure monitoring page
 
 ---
 
-## Project Scope
+## Project Status
 
-This project focuses on backend system design, data processing workflows, and tracking execution behavior through APIs and stored metadata.
+This is an ongoing personal project focused on backend engineering, data pipeline reliability, RAG observability, and agentic workflow orchestration.
