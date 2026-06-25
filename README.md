@@ -150,7 +150,7 @@ This is an ongoing personal project focused on backend engineering, data pipelin
 
 ## Author
 
-Built by **Priya Prajapati** to demonstrate backend engineering skills with Python, FastAPI, ETL pipelines, RAG workflows, PostgreSQL, ChromaDB, and Docker.
+Built by **Priya Prajapati (@Priya2149)** to demonstrate backend engineering skills with Python, FastAPI, ETL pipelines, RAG workflows, PostgreSQL, ChromaDB, and Docker.
 
 * LinkedIn: https://www.linkedin.com/in/prajapatipriya/
 * GitHub: https://github.com/Priya2149
