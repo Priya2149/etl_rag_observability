@@ -3,18 +3,15 @@ import shutil
 from fastapi import UploadFile
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
 
-UPLOAD_DIR = "app/uploads"
-CHROMA_DIR = "app/chroma_store"
+from ..config import CHROMA_DIR, RAG_UPLOAD_DIR
+from .embeddings import get_embedding_model
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+os.makedirs(RAG_UPLOAD_DIR, exist_ok=True)
 os.makedirs(CHROMA_DIR, exist_ok=True)
 
-embedding_model = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-
 def save_uploaded_file(file: UploadFile) -> str:
-    file_path = os.path.join(UPLOAD_DIR, file.filename)
+    file_path = os.path.join(RAG_UPLOAD_DIR, file.filename)
     with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
     return file_path
@@ -39,7 +36,7 @@ def ingest_document(file_path: str):
 
     vectorstore = Chroma.from_texts(
         texts=chunks,
-        embedding=embedding_model,
+        embedding=get_embedding_model(),
         metadatas=metadatas,
         persist_directory=CHROMA_DIR
     )

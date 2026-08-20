@@ -144,6 +144,19 @@ Observability Service
 
 ---
 
+## Configuration
+
+Runtime configuration is supplied through environment variables. Copy `.env.example` to `.env` for local Docker Compose overrides; `.env` is ignored by Git. The current retrieval-only behavior does not require an OpenAI API key, and `LLM_PROVIDER` defaults to `none`.
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+```
+
+The full test suite expects the Compose API services and Streamlit frontend to be running. Install `requirements-dev.txt` and the Playwright browser before running `python -m pytest`.
+
+---
+
 ## Project Status
 
 This is an ongoing personal project focused on backend engineering, data pipeline reliability, RAG observability, and agentic workflow orchestration.

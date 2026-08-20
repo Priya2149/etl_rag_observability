@@ -1,9 +1,12 @@
+import os
+
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base
 from sqlalchemy.orm import sessionmaker
 
-DATABASE_URL = (
-    "postgresql://postgres:postgres@etl_postgres:5432/etl_db"
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@db:5432/etl_db",
 )
 
 engine = create_engine(

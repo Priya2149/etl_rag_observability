@@ -1,6 +1,9 @@
 import requests
 
-RAG_BASE_URL = "http://rag_service:8000/rag"
+from config.settings import RAG_BASE_URL as RAG_SERVICE_URL
+
+
+RAG_BASE_URL = f"{RAG_SERVICE_URL}/rag"
 
 
 def upload_rag_file(uploaded_file):

@@ -1,4 +1,13 @@
 */venv/*
+.venv/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
 */app/__pycache__/*
 */app/routes/__pycache__/*
 */app/services/__pycache__/*

@@ -2,6 +2,7 @@ from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import json
+from time import perf_counter
 
 from app.db import get_db
 from app.models import RagDocument, RagQueryRun
@@ -39,23 +40,83 @@ async def upload_document(file: UploadFile = File(...), db: Session = Depends(ge
 
 @router.post("/ask")
 def ask_question(request: QueryRequest, db: Session = Depends(get_db)):
-    result = query_documents(request.query)
+    started_at = perf_counter()
+
+    try:
+        result = query_documents(request.query)
+    except Exception as exc:
+        processing_time_ms = round((perf_counter() - started_at) * 1000)
+        run = RagQueryRun(
+            query=request.query,
+            answer=None,
+            retrieved_chunks=None,
+            sources=json.dumps([]),
+            chunks_used=0,
+            processing_time_ms=processing_time_ms,
+            retrieved_count=0,
+            source_files=json.dumps([]),
+            best_distance=None,
+            risk_level="high",
+            evaluation_status="failed",
+            warning_flags=json.dumps(["query_execution_failed"]),
+            status="failed",
+            error_message=str(exc),
+        )
+        db.add(run)
+        db.commit()
+
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    processing_time_ms = round((perf_counter() - started_at) * 1000)
+    sources = result["source_files"]
 
     run = RagQueryRun(
         query=request.query,
         answer=result["answer"],
         retrieved_chunks=json.dumps(result["retrieved_chunks"]),
-        status="completed"
+        sources=json.dumps(sources),
+        chunks_used=result["chunks_used"],
+        processing_time_ms=processing_time_ms,
+        retrieved_count=result["retrieved_count"],
+        source_files=json.dumps(sources),
+        best_distance=result["best_distance"],
+        risk_level=result["risk_level"],
+        evaluation_status=result["evaluation_status"],
+        warning_flags=json.dumps(result["warning_flags"]),
+        status="completed",
     )
     db.add(run)
     db.commit()
     db.refresh(run)
 
+    retrieval_info = {
+        "chunks_used": result["chunks_used"],
+        "retrieved_count": result["retrieved_count"],
+        "best_distance": result["best_distance"],
+        "sources": sources,
+    }
+    evaluation = {
+        "risk_level": result["risk_level"],
+        "evaluation_status": result["evaluation_status"],
+        "warning_flags": result["warning_flags"],
+    }
+
     return {
         "run_id": run.id,
         "query": request.query,
         "answer": result["answer"],
-        "retrieved_chunks": result["retrieved_chunks"]
+        "retrieved_chunks": result["retrieved_chunks"],
+        "chunks_used": result["chunks_used"],
+        "retrieved_count": result["retrieved_count"],
+        "source_files": sources,
+        "sources": sources,
+        "best_distance": result["best_distance"],
+        "risk_level": result["risk_level"],
+        "evaluation_status": result["evaluation_status"],
+        "warning_flags": result["warning_flags"],
+        "processing_time_ms": processing_time_ms,
+        "retrieval_info": retrieval_info,
+        "evaluation": evaluation,
     }
 
 @router.get("/documents")
@@ -80,6 +141,14 @@ def get_runs(db: Session = Depends(get_db)):
             "id": run.id,
             "query": run.query,
             "answer": run.answer,
+            "chunks_used": run.chunks_used,
+            "retrieved_count": run.retrieved_count,
+            "source_files": json.loads(run.source_files) if run.source_files else [],
+            "best_distance": run.best_distance,
+            "risk_level": run.risk_level,
+            "evaluation_status": run.evaluation_status,
+            "warning_flags": json.loads(run.warning_flags) if run.warning_flags else [],
+            "processing_time_ms": run.processing_time_ms,
             "status": run.status,
             "created_at": run.created_at
         }
@@ -99,6 +168,12 @@ def get_run_details(run_id: int, db: Session = Depends(get_db)):
         "answer": run.answer,
         "status": run.status,
         "chunks_used": run.chunks_used,
+        "retrieved_count": run.retrieved_count,
+        "source_files": json.loads(run.source_files) if run.source_files else [],
+        "best_distance": run.best_distance,
+        "risk_level": run.risk_level,
+        "evaluation_status": run.evaluation_status,
+        "warning_flags": json.loads(run.warning_flags) if run.warning_flags else [],
         "processing_time_ms": run.processing_time_ms,
         "sources": json.loads(run.sources) if run.sources else [],
         "retrieved_chunks": json.loads(run.retrieved_chunks) if run.retrieved_chunks else [],

@@ -3,12 +3,16 @@ from __future__ import annotations
 from typing import Any
 import requests
 
-from config.settings import ETL_BASE_URL, RAG_BASE_URL, OBS_BASE_URL
+from config.settings import (
+    AGENT_BASE_URL,
+    ETL_BASE_URL,
+    OBS_BASE_URL,
+    RAG_BASE_URL,
+    REQUEST_TIMEOUT_SECONDS,
+)
 
 
-TIMEOUT_SECONDS = 60
-
-AGENT_BASE_URL = "http://agent_service:8000"
+TIMEOUT_SECONDS = REQUEST_TIMEOUT_SECONDS
 
 
 def create_agent_workflow(dataset_id=None, question=None):

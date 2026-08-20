@@ -1,8 +1,6 @@
 import requests
 
-ETL_BASE_URL = "http://etl_service:8000"
-RAG_BASE_URL = "http://rag_service:8000"
-OBS_BASE_URL = "http://observability_service:8000"
+from config.settings import ETL_BASE_URL, OBS_BASE_URL, RAG_BASE_URL
 
 
 # ----------------------

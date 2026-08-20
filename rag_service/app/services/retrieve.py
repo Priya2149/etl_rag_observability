@@ -1,40 +1,46 @@
 from langchain_community.vectorstores import Chroma
-from langchain_community.embeddings import HuggingFaceEmbeddings
 
-CHROMA_DIR = "app/chroma_store"
+from ..config import CHROMA_DIR
+from .embeddings import get_embedding_model
 
-embedding_model = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/all-MiniLM-L6-v2"
-)
+def evaluate_retrieval(
+    retrieved_chunks=None,
+    *,
+    retrieved_count=None,
+    chunks_used=None,
+    best_distance=None,
+    duplicate_count=0,
+):
+    """Evaluate retrieval quality using the metrics stored for each RAG run."""
+    if retrieved_chunks is not None:
+        retrieved_count = len(retrieved_chunks)
+        chunks_used = len(retrieved_chunks)
+        distances = [chunk["distance"] for chunk in retrieved_chunks]
+        best_distance = min(distances) if distances else None
 
-def evaluate_retrieval(retrieved_chunks):
+    retrieved_count = retrieved_count or 0
+    chunks_used = chunks_used or 0
     warning_flags = []
 
-    if not retrieved_chunks:
-        return {
-            "best_distance": None,
-            "risk_level": "high",
-            "evaluation_status": "no_results",
-            "warning_flags": ["No chunks retrieved"]
-        }
+    if retrieved_count == 0:
+        warning_flags.append("no_chunks_retrieved")
+    if chunks_used == 0:
+        warning_flags.append("no_chunks_used")
+    if duplicate_count > 0:
+        warning_flags.append("duplicate_chunks_detected")
+    if best_distance is not None and best_distance > 1.0:
+        warning_flags.append("low_retrieval_relevance")
 
-    best_distance = retrieved_chunks[0]["distance"]
-
-    if len(retrieved_chunks) == 1:
-        warning_flags.append("Only one chunk retrieved")
-
-    if best_distance > 1.0:
+    if retrieved_count == 0 or chunks_used == 0 or "low_retrieval_relevance" in warning_flags:
         risk_level = "high"
-        evaluation_status = "low_confidence"
-        warning_flags.append("Top match distance is high")
-    elif best_distance > 0.6:
-        risk_level = "medium"
         evaluation_status = "needs_review"
-        warning_flags.append("Top match is moderately relevant")
+    elif duplicate_count > 0 or (best_distance is not None and best_distance > 0.6):
+        risk_level = "medium"
+        evaluation_status = "warning"
     else:
         risk_level = "low"
         evaluation_status = "good"
-    
+
     return {
         "best_distance": best_distance,
         "risk_level": risk_level,
@@ -45,7 +51,7 @@ def evaluate_retrieval(retrieved_chunks):
 def query_documents(query: str, k: int = 3):
     vectorstore = Chroma(
         persist_directory=CHROMA_DIR,
-        embedding_function=embedding_model
+        embedding_function=get_embedding_model()
     )
 
     docs_with_scores = vectorstore.similarity_search_with_score(query, k=k)
@@ -53,11 +59,13 @@ def query_documents(query: str, k: int = 3):
     seen = set()
     retrieved_chunks = []
     source_files = set()
+    duplicate_count = 0
 
     for doc, score in docs_with_scores:
         content = doc.page_content.strip()
 
         if content in seen:
+            duplicate_count += 1
             continue
 
         seen.add(content)
@@ -72,14 +80,26 @@ def query_documents(query: str, k: int = 3):
             "distance": float(score)
         })
 
-    evaluation = evaluate_retrieval(retrieved_chunks)
+    retrieved_count = len(docs_with_scores)
+    chunks_used = len(retrieved_chunks)
+    distances = [chunk["distance"] for chunk in retrieved_chunks]
+    best_distance = min(distances) if distances else None
+    evaluation = evaluate_retrieval(
+        retrieved_count=retrieved_count,
+        chunks_used=chunks_used,
+        best_distance=best_distance,
+        duplicate_count=duplicate_count,
+    )
 
     if not retrieved_chunks:
         return {
             "answer": "No relevant content found.",
             "retrieved_chunks": [],
-            "retrieved_count": 0,
+            "retrieved_count": retrieved_count,
+            "chunks_used": 0,
+            "duplicate_count": duplicate_count,
             "source_files": [],
+            "sources": [],
             "best_distance": evaluation["best_distance"],
             "risk_level": evaluation["risk_level"],
             "evaluation_status": evaluation["evaluation_status"],
@@ -93,8 +113,11 @@ def query_documents(query: str, k: int = 3):
     return {
         "answer": answer,
         "retrieved_chunks": retrieved_chunks,
-        "retrieved_count": len(retrieved_chunks),
+        "retrieved_count": retrieved_count,
+        "chunks_used": chunks_used,
+        "duplicate_count": duplicate_count,
         "source_files": sorted(list(source_files)),
+        "sources": sorted(list(source_files)),
         "best_distance": evaluation["best_distance"],
         "risk_level": evaluation["risk_level"],
         "evaluation_status": evaluation["evaluation_status"],

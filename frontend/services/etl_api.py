@@ -1,6 +1,9 @@
 import requests
 
-ETL_BASE_URL = "http://etl_service:8000/etl"
+from config.settings import ETL_BASE_URL as ETL_SERVICE_URL
+
+
+ETL_BASE_URL = f"{ETL_SERVICE_URL}/etl"
 
 
 def upload_etl_file(uploaded_file):
