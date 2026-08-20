@@ -1,18 +1,42 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
-from pydantic import BaseModel
-from sqlalchemy.orm import Session
 import json
 from time import perf_counter
 
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
 from app.db import get_db
 from app.models import RagDocument, RagQueryRun
-from app.services.ingest import save_uploaded_file, ingest_document
+from app.services.answer import build_rag_request, generate_rag_answer
+from app.services.ingest import ingest_document, save_uploaded_file
 from app.services.retrieve import query_documents
+from shared.llm import (
+    LLMConfigurationError,
+    LLMError,
+    LLMProviderError,
+    LLMRateLimitError,
+    get_configured_provider,
+)
 
 router = APIRouter(prefix="/rag", tags=["RAG"])
 
 class QueryRequest(BaseModel):
     query: str
+
+
+def _provider_status_code(exc: Exception) -> int:
+    if isinstance(exc, LLMConfigurationError):
+        return 503
+    if isinstance(exc, LLMRateLimitError):
+        return 429
+    if isinstance(exc, LLMProviderError):
+        return 502
+    return 500
+
+
+def _sse(event: str, payload: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(payload)}\n\n"
 
 @router.post("/upload")
 async def upload_document(file: UploadFile = File(...), db: Session = Depends(get_db)):
@@ -43,7 +67,11 @@ def ask_question(request: QueryRequest, db: Session = Depends(get_db)):
     started_at = perf_counter()
 
     try:
+        provider = get_configured_provider()
         result = query_documents(request.query)
+        generation = generate_rag_answer(request.query, result, provider=provider)
+        result["answer"] = generation.output.answer
+        result["sources"] = generation.output.sources
     except Exception as exc:
         processing_time_ms = round((perf_counter() - started_at) * 1000)
         run = RagQueryRun(
@@ -65,10 +93,13 @@ def ask_question(request: QueryRequest, db: Session = Depends(get_db)):
         db.add(run)
         db.commit()
 
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=_provider_status_code(exc), detail=str(exc)
+        ) from exc
 
     processing_time_ms = round((perf_counter() - started_at) * 1000)
-    sources = result["source_files"]
+    sources = result["sources"]
+    source_files = result["source_files"]
 
     run = RagQueryRun(
         query=request.query,
@@ -78,7 +109,7 @@ def ask_question(request: QueryRequest, db: Session = Depends(get_db)):
         chunks_used=result["chunks_used"],
         processing_time_ms=processing_time_ms,
         retrieved_count=result["retrieved_count"],
-        source_files=json.dumps(sources),
+        source_files=json.dumps(source_files),
         best_distance=result["best_distance"],
         risk_level=result["risk_level"],
         evaluation_status=result["evaluation_status"],
@@ -108,16 +139,71 @@ def ask_question(request: QueryRequest, db: Session = Depends(get_db)):
         "retrieved_chunks": result["retrieved_chunks"],
         "chunks_used": result["chunks_used"],
         "retrieved_count": result["retrieved_count"],
-        "source_files": sources,
+        "source_files": source_files,
         "sources": sources,
         "best_distance": result["best_distance"],
         "risk_level": result["risk_level"],
         "evaluation_status": result["evaluation_status"],
         "warning_flags": result["warning_flags"],
         "processing_time_ms": processing_time_ms,
+        "request_id": generation.request_id,
+        "provider": generation.provider,
+        "model": generation.model,
+        "usage": generation.usage.model_dump(),
         "retrieval_info": retrieval_info,
         "evaluation": evaluation,
     }
+
+
+@router.post("/ask/stream")
+def ask_question_stream(request: QueryRequest):
+    try:
+        provider = get_configured_provider()
+        retrieval = query_documents(request.query)
+        llm_request = build_rag_request(request.query, retrieval)
+    except LLMError as exc:
+        raise HTTPException(
+            status_code=_provider_status_code(exc), detail=str(exc)
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+
+    def event_stream():
+        yield _sse(
+            "metadata",
+            {
+                "provider": provider.name,
+                "model": provider.model,
+                "sources": retrieval["source_files"],
+            },
+        )
+        try:
+            for event in provider.stream(llm_request):
+                if event.type == "delta":
+                    yield _sse("delta", {"text": event.delta})
+                else:
+                    yield _sse(
+                        "completed",
+                        {
+                            "request_id": event.request_id,
+                            "provider": event.provider,
+                            "model": event.model,
+                            "sources": retrieval["source_files"],
+                            "usage": event.usage.model_dump(),
+                        },
+                    )
+        except LLMError as exc:
+            yield _sse("error", {"detail": str(exc)})
+        # The SSE response has already started, so unexpected errors must become
+        # a safe terminal event instead of an unhandled connection traceback.
+        except Exception:  # noqa: BLE001
+            yield _sse("error", {"detail": "Streaming generation failed."})
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 @router.get("/documents")
 def get_documents(db: Session = Depends(get_db)):

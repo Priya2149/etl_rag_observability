@@ -6,3 +6,4 @@ pydantic
 requests
 langgraph
 typing_extensions
+openai==3.3.1

@@ -10,8 +10,11 @@ This repository is a Docker Compose application with five Python services and on
 - `agent_service`: FastAPI workflow orchestration, ETL/RAG HTTP tool clients, step tracing, human approval, and the existing LangGraph workflow path.
 - `frontend`: Streamlit dashboard for ETL, RAG, observability, failures, and agent workflows.
 - `db`: PostgreSQL shared by the backend services. ChromaDB storage remains owned by `rag_service`.
+- `shared/llm`: Provider-independent LLM configuration, typed responses, retries, local retrieval-only generation, and the OpenAI provider. It is packaged into the RAG and agent images but does not bypass their HTTP/data boundaries.
 
 Keep service boundaries intact. The mounted FastAPI routers under each service's `app/routes` directory are the API source of truth. Cross-service operations should use the existing HTTP clients rather than importing another service's internals.
+
+Keep OpenAI initialization lazy and keep `LLM_PROVIDER=none` usable without a key or network access. Automated tests must use fake provider clients and must never call paid APIs.
 
 ## Common Commands
 
@@ -52,6 +55,7 @@ Run focused unit tests while developing:
 
 ```powershell
 python -m pytest tests/etl tests/rag tests/agent
+python -m pytest tests/llm tests/rag
 ```
 
 Run static checks:

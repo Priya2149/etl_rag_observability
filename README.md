@@ -157,6 +157,61 @@ The full test suite expects the Compose API services and Streamlit frontend to b
 
 ---
 
+## OpenAI API Integration
+
+The RAG service has a provider-independent LLM layer in `shared/llm`. The default `LLM_PROVIDER=none` path is free and preserves the original deterministic retrieval-only answer. `LLM_PROVIDER=local` is an explicit alias for the same no-network path. Neither mode requires an API key.
+
+### Configuration and authentication
+
+Copy `.env.example` to `.env` and select the provider through environment variables. `.env` is ignored by Git, and `OPENAI_API_KEY` is read only from the environment.
+
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `LLM_PROVIDER` | `none`, `local`, or `openai` | `none` |
+| `OPENAI_API_KEY` | OpenAI API authentication; required only for `openai` | empty |
+| `OPENAI_MODEL` | Model sent to the Responses API | empty |
+| `LLM_TIMEOUT_SECONDS` | Outbound request timeout | `60` |
+| `LLM_MAX_RETRIES` | Retries after the initial transient failure | `2` |
+| `LLM_RETRY_BASE_SECONDS` | Initial exponential-backoff delay | `0.5` |
+
+OpenAI mode initializes lazily. Selecting `openai` without both a key and model returns a clear service error from the RAG request, but does not prevent service startup or health checks.
+
+To enable real OpenAI generation:
+
+```powershell
+Set-Item Env:LLM_PROVIDER openai
+Set-Item Env:OPENAI_MODEL your-enabled-model
+Set-Item Env:OPENAI_API_KEY (Read-Host "OpenAI API key")
+```
+
+Do not put real credentials in `.env.example` or commit `.env`.
+
+### RAG flow and response types
+
+`POST /rag/ask` keeps the existing semantic retrieval and evaluation flow, then sends the question and retrieved context to the selected provider. OpenAI mode uses the official Python SDK and the Responses API's Pydantic structured-output support to produce a grounded `answer` and `sources`. The existing response fields remain, with these additions:
+
+- `request_id`
+- `provider`
+- `model`
+- `usage.input_tokens`
+- `usage.output_tokens`
+- `usage.total_tokens`
+
+Model-returned sources are allowlisted against the retrieved source identifiers. Token usage is returned for later observability persistence but is not stored in PostgreSQL yet.
+
+`POST /rag/ask/stream` returns Server-Sent Events with `metadata`, `delta`, `completed`, or `error` event types. The synchronous endpoint remains unchanged for existing clients. See the official OpenAI documentation for the [Responses API](https://developers.openai.com/api/docs/guides/latest-model), [Structured Outputs](https://developers.openai.com/api/docs/guides/structured-outputs), and [streaming responses](https://developers.openai.com/api/docs/guides/streaming-responses).
+
+The provider layer disables SDK-level retries and applies one centralized bounded policy instead. Connection failures, timeouts, HTTP 408/409, rate limits, and server errors receive exponential backoff. Authentication and validation failures are not retried indefinitely.
+
+Automated tests inject fake OpenAI clients and never call the real API. Run locally without paid usage using the defaults:
+
+```powershell
+$env:LLM_PROVIDER = "none"
+python -m pytest tests/llm tests/rag
+```
+
+---
+
 ## Project Status
 
 This is an ongoing personal project focused on backend engineering, data pipeline reliability, RAG observability, and agentic workflow orchestration.
