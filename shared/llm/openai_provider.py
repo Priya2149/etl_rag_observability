@@ -1,9 +1,12 @@
+import json
 from collections.abc import Callable, Iterator
 from time import sleep as default_sleep
 from typing import Any, TypeVar
 
 from openai import OpenAI
 from pydantic import BaseModel, ValidationError
+
+from shared.tools import ToolCall
 
 from .config import LLMSettings
 from .errors import LLMConfigurationError, LLMProviderError, LLMRateLimitError
@@ -14,6 +17,8 @@ from .models import (
     ProviderCapabilities,
     StructuredLLMResult,
     TokenUsage,
+    ToolResultContinuation,
+    ToolSelectionResult,
 )
 from .provider import LLMProvider
 from .retry import RetryPolicy, call_with_retry, is_transient_error
@@ -114,6 +119,105 @@ class OpenAIProvider(LLMProvider):
     ) -> StructuredLLMResult[StructuredOutputT]:
         kwargs = self._request_kwargs(request)
         kwargs["text_format"] = response_model
+
+        try:
+            response = call_with_retry(
+                lambda: self._client.responses.parse(**kwargs),
+                self._retry_policy,
+                self._sleep,
+            )
+            output = response_model.model_validate(response.output_parsed)
+        except ValidationError as exc:
+            raise LLMProviderError(
+                "OpenAI returned a response that did not match the required schema."
+            ) from exc
+        except Exception as exc:
+            raise self._provider_error(exc) from exc
+
+        return StructuredLLMResult(
+            output=output,
+            request_id=response.id,
+            provider=self.name,
+            model=getattr(response, "model", self.model),
+            usage=self._usage(response),
+        )
+
+    def select_tools(self, request: LLMRequest) -> ToolSelectionResult:
+        try:
+            response = call_with_retry(
+                lambda: self._client.responses.create(**self._request_kwargs(request)),
+                self._retry_policy,
+                self._sleep,
+            )
+        except Exception as exc:
+            raise self._provider_error(exc) from exc
+
+        tool_calls = []
+        for item in getattr(response, "output", []):
+            item_type = (
+                item.get("type")
+                if isinstance(item, dict)
+                else getattr(item, "type", None)
+            )
+            if item_type != "function_call":
+                continue
+            if isinstance(item, dict):
+                call_id = item.get("call_id")
+                name = item.get("name")
+                raw_arguments = item.get("arguments")
+            else:
+                call_id = item.call_id
+                name = item.name
+                raw_arguments = item.arguments
+            arguments_valid = True
+            try:
+                arguments = json.loads(raw_arguments)
+                if not isinstance(arguments, dict):
+                    arguments = {}
+                    arguments_valid = False
+            except (TypeError, json.JSONDecodeError):
+                arguments = {}
+                arguments_valid = False
+            tool_calls.append(
+                ToolCall(
+                    call_id=call_id,
+                    name=name,
+                    arguments=arguments,
+                    arguments_valid=arguments_valid,
+                )
+            )
+
+        return ToolSelectionResult(
+            tool_calls=tool_calls,
+            output=getattr(response, "output_text", "") or "",
+            request_id=response.id,
+            provider=self.name,
+            model=getattr(response, "model", self.model),
+            usage=self._usage(response),
+        )
+
+    def generate_structured_with_tool_results(
+        self,
+        request: LLMRequest,
+        continuation: ToolResultContinuation,
+        response_model: type[StructuredOutputT],
+    ) -> StructuredLLMResult[StructuredOutputT]:
+        tool_outputs = [
+            {
+                "type": "function_call_output",
+                "call_id": result.call_id,
+                "output": result.model_dump_json(),
+            }
+            for result in continuation.results
+        ]
+        kwargs: dict[str, Any] = {
+            "model": self.model,
+            "input": tool_outputs,
+            "previous_response_id": continuation.previous_response_id,
+            "text_format": response_model,
+        }
+        if request.instructions:
+            kwargs["instructions"] = request.instructions
 
         try:
             response = call_with_retry(

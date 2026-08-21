@@ -10,6 +10,8 @@ from .models import (
     LLMStreamEvent,
     ProviderCapabilities,
     StructuredLLMResult,
+    ToolResultContinuation,
+    ToolSelectionResult,
 )
 
 StructuredOutputT = TypeVar("StructuredOutputT", bound=BaseModel)
@@ -34,4 +36,15 @@ class LLMProvider(ABC):
 
     @abstractmethod
     def stream(self, request: LLMRequest) -> Iterator[LLMStreamEvent]:
+        raise NotImplementedError
+
+    def select_tools(self, request: LLMRequest) -> ToolSelectionResult:
+        raise NotImplementedError
+
+    def generate_structured_with_tool_results(
+        self,
+        request: LLMRequest,
+        continuation: ToolResultContinuation,
+        response_model: type[StructuredOutputT],
+    ) -> StructuredLLMResult[StructuredOutputT]:
         raise NotImplementedError

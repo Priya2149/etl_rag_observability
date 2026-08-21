@@ -155,6 +155,27 @@ def ask_question(request: QueryRequest, db: Session = Depends(get_db)):
     }
 
 
+@router.post("/search")
+def search_documents(request: QueryRequest):
+    """Expose semantic retrieval without invoking an LLM or recording a RAG answer."""
+    try:
+        result = query_documents(request.query)
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail="Document search failed.") from exc
+
+    return {
+        "query": request.query,
+        "retrieved_chunks": result["retrieved_chunks"],
+        "retrieved_count": result["retrieved_count"],
+        "chunks_used": result["chunks_used"],
+        "source_files": result["source_files"],
+        "best_distance": result["best_distance"],
+        "risk_level": result["risk_level"],
+        "evaluation_status": result["evaluation_status"],
+        "warning_flags": result["warning_flags"],
+    }
+
+
 @router.post("/ask/stream")
 def ask_question_stream(request: QueryRequest):
     try:

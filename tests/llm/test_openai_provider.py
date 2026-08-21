@@ -9,8 +9,10 @@ from shared.llm import (
     LLMRateLimitError,
     LLMRequest,
     LLMSettings,
+    ToolResultContinuation,
 )
 from shared.llm.openai_provider import OpenAIProvider
+from shared.tools import ToolExecutionResult
 
 
 class ProviderStatusError(Exception):
@@ -82,9 +84,8 @@ def parsed_response(output=None):
     return SimpleNamespace(
         id="resp_123",
         model="test-model-2026-01-01",
-        output_parsed=output or GroundedAnswer(
-            answer="Grounded response", sources=["guide.txt"]
-        ),
+        output_parsed=output
+        or GroundedAnswer(answer="Grounded response", sources=["guide.txt"]),
         usage=SimpleNamespace(
             input_tokens=12,
             output_tokens=5,
@@ -95,9 +96,7 @@ def parsed_response(output=None):
 
 def test_openai_structured_request_and_token_metadata():
     responses = FakeResponses(parse_results=[parsed_response()])
-    provider = OpenAIProvider(
-        settings(), client=SimpleNamespace(responses=responses)
-    )
+    provider = OpenAIProvider(settings(), client=SimpleNamespace(responses=responses))
     request = LLMRequest(
         input="Question and context",
         instructions="Use only context",
@@ -151,9 +150,7 @@ def test_standard_generation_passes_future_tool_configuration():
         usage=None,
     )
     responses = FakeResponses(create_result=response)
-    provider = OpenAIProvider(
-        settings(), client=SimpleNamespace(responses=responses)
-    )
+    provider = OpenAIProvider(settings(), client=SimpleNamespace(responses=responses))
     request = LLMRequest(
         input="Call when needed",
         tools=[{"type": "function", "name": "lookup"}],
@@ -165,6 +162,67 @@ def test_standard_generation_passes_future_tool_configuration():
     assert responses.create_calls[0]["tools"] == request.tools
     assert responses.create_calls[0]["tool_choice"] == "auto"
     assert result.output == "Normal response"
+
+
+def test_openai_function_call_is_returned_as_typed_tool_call():
+    response = SimpleNamespace(
+        id="resp_tools",
+        model="test-model",
+        output_text="",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                call_id="call_123",
+                name="get_pipeline_status",
+                arguments='{"run_id": null}',
+            )
+        ],
+        usage=SimpleNamespace(input_tokens=5, output_tokens=2, total_tokens=7),
+    )
+    responses = FakeResponses(create_result=response)
+    provider = OpenAIProvider(settings(), client=SimpleNamespace(responses=responses))
+    request = LLMRequest(
+        input="What is the latest run status?",
+        tools=[{"type": "function", "name": "get_pipeline_status"}],
+        tool_choice="auto",
+    )
+
+    result = provider.select_tools(request)
+
+    assert result.tool_calls[0].model_dump() == {
+        "call_id": "call_123",
+        "name": "get_pipeline_status",
+        "arguments": {"run_id": None},
+        "arguments_valid": True,
+    }
+    assert result.usage.total_tokens == 7
+
+
+def test_openai_tool_result_continues_to_structured_answer():
+    responses = FakeResponses(parse_results=[parsed_response()])
+    provider = OpenAIProvider(settings(), client=SimpleNamespace(responses=responses))
+    tool_result = ToolExecutionResult(
+        call_id="call_123",
+        name="get_pipeline_status",
+        success=True,
+        data={"status": "completed"},
+    )
+
+    result = provider.generate_structured_with_tool_results(
+        LLMRequest(input="Latest status", instructions="Use the tool result."),
+        ToolResultContinuation(
+            previous_response_id="resp_tools", results=[tool_result]
+        ),
+        GroundedAnswer,
+    )
+
+    call = responses.parse_calls[0]
+    assert call["previous_response_id"] == "resp_tools"
+    assert call["input"][0]["type"] == "function_call_output"
+    assert call["input"][0]["call_id"] == "call_123"
+    assert '"status":"completed"' in call["input"][0]["output"]
+    assert call["text_format"] is GroundedAnswer
+    assert result.output.answer == "Grounded response"
 
 
 def test_transient_timeout_is_retried_with_exponential_backoff():
@@ -219,9 +277,7 @@ def test_permanent_authentication_error_is_not_retried():
 def test_invalid_structured_output_fails_validation():
     response = parsed_response(output=SimpleNamespace(sources=[]))
     responses = FakeResponses(parse_results=[response])
-    provider = OpenAIProvider(
-        settings(), client=SimpleNamespace(responses=responses)
-    )
+    provider = OpenAIProvider(settings(), client=SimpleNamespace(responses=responses))
 
     with pytest.raises(LLMProviderError, match="required schema"):
         provider.generate_structured(LLMRequest(input="validate"), GroundedAnswer)
@@ -242,9 +298,7 @@ def test_streaming_emits_deltas_and_final_usage():
         response=final_response,
     )
     responses = FakeResponses(streams=[stream])
-    provider = OpenAIProvider(
-        settings(), client=SimpleNamespace(responses=responses)
-    )
+    provider = OpenAIProvider(settings(), client=SimpleNamespace(responses=responses))
 
     events = list(provider.stream(LLMRequest(input="stream")))
 

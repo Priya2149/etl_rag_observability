@@ -1,14 +1,32 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 import json
 
 from app.db import get_db
 from app.models import WorkflowRun, WorkflowStep
-from app.schemas import WorkflowRequest
-from app.services.orchestrator import run_workflow, continue_after_approval
-from app.services.langgraph_workflow import run_langgraph_until_approval, run_langgraph_report
+from app.schemas import AgentQueryRequest, AgentQueryResponse, WorkflowRequest
+from app.services.agentic_workflow import run_agentic_query
+from app.services.langgraph_workflow import (
+    run_langgraph_report,
+    run_langgraph_until_approval,
+)
+from app.services.orchestrator import continue_after_approval, run_workflow
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from shared.llm import LLMConfigurationError
 
 router = APIRouter(prefix="/agent", tags=["Agent"])
+
+
+@router.post("/query", response_model=AgentQueryResponse)
+def query_agent(request: AgentQueryRequest):
+    try:
+        return run_agentic_query(request.query)
+    except Exception as exc:
+        if isinstance(exc, LLMConfigurationError):
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(
+            status_code=500, detail="Agent workflow could not be completed."
+        ) from exc
 
 
 @router.post("/workflow")

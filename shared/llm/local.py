@@ -11,6 +11,8 @@ from .models import (
     ProviderCapabilities,
     StructuredLLMResult,
     TokenUsage,
+    ToolResultContinuation,
+    ToolSelectionResult,
 )
 from .provider import LLMProvider
 
@@ -75,3 +77,32 @@ class LocalRetrievalProvider(LLMProvider):
             model=self.model,
             usage=TokenUsage(input_tokens=0, output_tokens=0, total_tokens=0),
         )
+
+    def select_tools(self, request: LLMRequest) -> ToolSelectionResult:
+        result = self.generate(request)
+        return ToolSelectionResult(
+            output=result.output,
+            request_id=result.request_id,
+            provider=result.provider,
+            model=result.model,
+            usage=result.usage,
+        )
+
+    def generate_structured_with_tool_results(
+        self,
+        request: LLMRequest,
+        continuation: ToolResultContinuation,
+        response_model: type[StructuredOutputT],
+    ) -> StructuredLLMResult[StructuredOutputT]:
+        summaries = [
+            result.data.get("summary", "")
+            for result in continuation.results
+            if result.success and result.data
+        ]
+        sources = [
+            source for result in continuation.results for source in result.sources
+        ]
+        local_request = request.model_copy(
+            update={"context": summaries, "sources": list(dict.fromkeys(sources))}
+        )
+        return self.generate_structured(local_request, response_model)

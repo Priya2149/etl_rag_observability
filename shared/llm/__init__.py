@@ -14,6 +14,8 @@ from .models import (
     ProviderCapabilities,
     StructuredLLMResult,
     TokenUsage,
+    ToolResultContinuation,
+    ToolSelectionResult,
 )
 from .provider import LLMProvider
 
@@ -31,6 +33,8 @@ __all__ = [
     "ProviderCapabilities",
     "StructuredLLMResult",
     "TokenUsage",
+    "ToolResultContinuation",
+    "ToolSelectionResult",
     "create_provider",
     "get_configured_provider",
     "reset_provider_cache",

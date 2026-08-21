@@ -212,6 +212,60 @@ python -m pytest tests/llm tests/rag
 
 ---
 
+## Agentic Workflow
+
+`POST /agent/query` adds a bounded, stateful LangGraph query path without replacing the existing deterministic approval workflows under `/agent/workflow`. The graph records a typed request state, classifies the route, conditionally selects and executes only the needed tools, synthesizes a grounded answer, and validates the final Pydantic response.
+
+The provider-neutral registry in `shared/tools` defines strict Pydantic inputs and outputs for:
+
+- `search_documents(query)`: calls retrieval-only `POST /rag/search` and returns ChromaDB evidence plus retrieval evaluation metadata.
+- `get_dataset_schema(run_id)`: returns the persisted ETL column profile and schema issues.
+- `get_dataset_profile(run_id)`: returns ETL quality, anomaly, dimension, and profile data.
+- `get_pipeline_status(run_id)`: returns bounded ETL run status, timing, quality, and safe failure details.
+
+For all ETL tools, `run_id=null` means the latest run. The project does not expose unrestricted SQL, arbitrary dataset rows, shell commands, or filesystem access. A general `query_dataset` tool is intentionally omitted because the current services do not own a safe bounded row-query API.
+
+```mermaid
+flowchart TD
+    User --> AgentAPI[Agent API /agent/query]
+    AgentAPI --> Route[LangGraph route/classify]
+    Route -->|OpenAI| Selection[OpenAI function selection]
+    Route -->|none/local| Local[Deterministic selection]
+    Selection --> Tools[Shared Tool Layer]
+    Local --> Tools
+    Route -->|No tool| Synthesis
+    Tools --> ETL[ETL Service]
+    Tools --> RAG[RAG retrieval]
+    ETL --> Synthesis[Grounded synthesis]
+    RAG --> Synthesis
+    Synthesis --> Validate[Structured validation]
+    Validate --> Response[Typed response]
+```
+
+### OpenAI tool calling
+
+When `LLM_PROVIDER=openai`, the provider sends the strict shared tool definitions to the Responses API with `tool_choice=auto`. LangGraph executes returned function calls after validating their JSON arguments, then sends `function_call_output` items back using the prior response ID. The continuation uses Pydantic structured output for `answer` and `sources`; returned sources are allowlisted against tool-provided identifiers. See the official OpenAI [function calling guide](https://developers.openai.com/api/docs/guides/function-calling).
+
+OpenAI may select multiple tools in one iteration. Execution is bounded by `AGENT_MAX_TOOL_ITERATIONS`, `AGENT_MAX_TOOL_CALLS`, and `AGENT_RECURSION_LIMIT`. Invalid arguments, missing runs/documents, service timeouts, unknown tools, and provider failures produce sanitized workflow errors and a graceful final response rather than an uncontrolled loop or stack trace.
+
+The API response includes `answer`, `sources`, `tools_used`, `request_id`, `provider`, `model`, and workflow metadata for the selected route, call count, execution duration, iterations, retries, errors, and token usage. These fields are hooks for later observability persistence; Phase 2 does not change the observability database or dashboard.
+
+Example requests:
+
+```powershell
+Invoke-RestMethod -Method Post -Uri http://localhost:8003/agent/query `
+  -ContentType application/json `
+  -Body '{"query":"What is the quality score of the latest ETL run and what problems were detected?"}'
+
+Invoke-RestMethod -Method Post -Uri http://localhost:8003/agent/query `
+  -ContentType application/json `
+  -Body '{"query":"Search the indexed documents for CPU embeddings and summarize the evidence."}'
+```
+
+With `LLM_PROVIDER=none` or `local`, the same endpoint uses deterministic route-to-tool selection and formats grounded tool results without an OpenAI key or paid API request. Automated tool and graph tests use fakes exclusively.
+
+---
+
 ## Project Status
 
 This is an ongoing personal project focused on backend engineering, data pipeline reliability, RAG observability, and agentic workflow orchestration.

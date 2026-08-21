@@ -2,6 +2,8 @@ from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, Field
 
+from shared.tools import ToolCall, ToolExecutionResult
+
 
 class ProviderCapabilities(BaseModel):
     streaming: bool = True
@@ -36,6 +38,20 @@ class LLMResult(BaseModel):
     provider: str
     model: str
     usage: TokenUsage = Field(default_factory=TokenUsage)
+
+
+class ToolSelectionResult(BaseModel):
+    tool_calls: list[ToolCall] = Field(default_factory=list)
+    output: str = ""
+    request_id: str
+    provider: str
+    model: str
+    usage: TokenUsage = Field(default_factory=TokenUsage)
+
+
+class ToolResultContinuation(BaseModel):
+    previous_response_id: str
+    results: list[ToolExecutionResult]
 
 
 StructuredOutputT = TypeVar("StructuredOutputT", bound=BaseModel)
