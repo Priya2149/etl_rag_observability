@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 
+import httpx
 import pytest
+from openai import APITimeoutError, AuthenticationError, RateLimitError
 
 import shared.llm.openai_provider as openai_provider_module
 from shared.llm import (
@@ -13,12 +15,6 @@ from shared.llm import (
 )
 from shared.llm.openai_provider import OpenAIProvider
 from shared.tools import ToolExecutionResult
-
-
-class ProviderStatusError(Exception):
-    def __init__(self, status_code: int):
-        super().__init__(f"provider status {status_code}")
-        self.status_code = status_code
 
 
 class FakeResponses:
@@ -91,6 +87,16 @@ def parsed_response(output=None):
             output_tokens=5,
             total_tokens=17,
         ),
+    )
+
+
+def openai_response_error(error_type, status_code):
+    request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+    response = httpx.Response(status_code, request=request)
+    return error_type(
+        f"provider status {status_code}",
+        response=response,
+        body={"error": {"message": "test provider error"}},
     )
 
 
@@ -198,6 +204,30 @@ def test_openai_function_call_is_returned_as_typed_tool_call():
     assert result.usage.total_tokens == 7
 
 
+def test_invalid_function_call_arguments_are_marked_invalid():
+    response = SimpleNamespace(
+        id="resp_invalid_tools",
+        model="test-model",
+        output_text="",
+        output=[
+            SimpleNamespace(
+                type="function_call",
+                call_id="call_invalid",
+                name="get_pipeline_status",
+                arguments="{not-json",
+            )
+        ],
+        usage=None,
+    )
+    responses = FakeResponses(create_result=response)
+    provider = OpenAIProvider(settings(), client=SimpleNamespace(responses=responses))
+
+    result = provider.select_tools(LLMRequest(input="Use a tool"))
+
+    assert result.tool_calls[0].arguments == {}
+    assert result.tool_calls[0].arguments_valid is False
+
+
 def test_openai_tool_result_continues_to_structured_answer():
     responses = FakeResponses(parse_results=[parsed_response()])
     provider = OpenAIProvider(settings(), client=SimpleNamespace(responses=responses))
@@ -227,7 +257,14 @@ def test_openai_tool_result_continues_to_structured_answer():
 
 def test_transient_timeout_is_retried_with_exponential_backoff():
     responses = FakeResponses(
-        parse_results=[ProviderStatusError(408), parsed_response()]
+        parse_results=[
+            APITimeoutError(
+                request=httpx.Request(
+                    "POST", "https://api.openai.com/v1/responses"
+                )
+            ),
+            parsed_response(),
+        ]
     )
     delays = []
     provider = OpenAIProvider(
@@ -243,9 +280,9 @@ def test_transient_timeout_is_retried_with_exponential_backoff():
 def test_rate_limit_uses_bounded_retries_and_clear_error():
     responses = FakeResponses(
         parse_results=[
-            ProviderStatusError(429),
-            ProviderStatusError(429),
-            ProviderStatusError(429),
+            openai_response_error(RateLimitError, 429),
+            openai_response_error(RateLimitError, 429),
+            openai_response_error(RateLimitError, 429),
         ]
     )
     delays = []
@@ -261,7 +298,9 @@ def test_rate_limit_uses_bounded_retries_and_clear_error():
 
 
 def test_permanent_authentication_error_is_not_retried():
-    responses = FakeResponses(parse_results=[ProviderStatusError(401)])
+    responses = FakeResponses(
+        parse_results=[openai_response_error(AuthenticationError, 401)]
+    )
     delays = []
     provider = OpenAIProvider(
         settings(), client=SimpleNamespace(responses=responses), sleep=delays.append

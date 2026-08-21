@@ -138,6 +138,44 @@ def test_openai_can_return_multiple_tool_results_in_one_bounded_iteration():
     assert len(provider.continuations[0].results) == 2
 
 
+def test_tool_call_limit_truncates_extra_calls_and_records_an_error(monkeypatch):
+    monkeypatch.setattr(agentic_workflow, "AGENT_MAX_TOOL_CALLS", 2)
+    executed = []
+
+    def record(payload):
+        executed.append(payload.query)
+        return SearchDocumentsOutput(
+            query=payload.query,
+            retrieved_chunks=[],
+            sources=[],
+            summary=f"Handled {payload.query}.",
+        )
+
+    provider = FakeOpenAIProvider(
+        [
+            ToolCall(
+                call_id=f"call-{query}",
+                name="search_documents",
+                arguments={"query": query},
+            )
+            for query in ("one", "two", "three")
+        ]
+    )
+
+    response = run_agentic_query(
+        "Find document evidence",
+        provider=provider,
+        registry=search_registry(record),
+    )
+
+    assert executed == ["one", "two"]
+    assert response.workflow.tool_call_count == 2
+    assert len(provider.continuations[0].results) == 2
+    assert response.workflow.errors == [
+        "Tool call limit reached; extra calls were not executed."
+    ]
+
+
 def test_no_tool_path_skips_execution_and_returns_model_answer():
     provider = FakeOpenAIProvider(
         [], selection_output="No repository lookup is needed."
