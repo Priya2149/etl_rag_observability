@@ -2,7 +2,7 @@
 
 ## Current Architecture
 
-This repository is a Docker Compose application with five Python services and one shared PostgreSQL database:
+This repository is a Docker Compose application with five Python services, one local MCP adapter, and one shared PostgreSQL database:
 
 - `etl_service`: FastAPI CSV ingestion, profiling, anomaly detection, quality scoring, and ETL run persistence.
 - `rag_service`: FastAPI text ingestion, Sentence Transformers embeddings, ChromaDB retrieval, retrieval evaluation, and RAG run persistence.
@@ -12,12 +12,15 @@ This repository is a Docker Compose application with five Python services and on
 - `db`: PostgreSQL shared by the backend services. ChromaDB storage remains owned by `rag_service`.
 - `shared/llm`: Provider-independent LLM configuration, typed responses, retries, local retrieval-only generation, and the OpenAI provider. It is packaged into the RAG and agent images but does not bypass their HTTP/data boundaries.
 - `shared/tools`: Provider-neutral typed application tool schemas and execution registry. Concrete handlers remain in `agent_service` and call ETL/RAG over their mounted HTTP APIs so LangGraph, OpenAI function calling, and a future MCP adapter can reuse one safe tool surface.
+- `mcp_service`: Official Python MCP SDK stdio adapter over the existing `shared/tools` registry. It owns protocol registration only; ETL/RAG behavior stays in the shared registry and existing service clients.
 
 The original approval workflow endpoints remain separate from `POST /agent/query`, which runs the bounded conditional LangGraph query workflow. Extend either path without silently changing the contract of the other.
 
 Keep service boundaries intact. The mounted FastAPI routers under each service's `app/routes` directory are the API source of truth. Cross-service operations should use the existing HTTP clients rather than importing another service's internals.
 
 Keep OpenAI initialization lazy and keep `LLM_PROVIDER=none` usable without a key or network access. Automated tests must use fake provider clients and must never call paid APIs.
+
+Keep MCP tools read-only and backed by `shared/tools`. Do not add arbitrary SQL, shell execution, arbitrary filesystem access, secret-returning tools, or duplicate ETL/RAG business logic to `mcp_service`.
 
 ## Common Commands
 
@@ -60,6 +63,14 @@ Run focused unit tests while developing:
 python -m pytest tests/etl tests/rag tests/agent
 python -m pytest tests/llm tests/rag
 python -m pytest tests/tools tests/agent
+python -m pytest tests/mcp
+```
+
+Start the local stdio MCP server or run its discovery/invocation demo:
+
+```powershell
+python -m mcp_service.server
+python -m mcp_service.demo_client
 ```
 
 Run static checks:

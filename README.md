@@ -266,6 +266,89 @@ With `LLM_PROVIDER=none` or `local`, the same endpoint uses deterministic route-
 
 ---
 
+## MCP Integration
+
+The repository includes a real [Model Context Protocol](https://modelcontextprotocol.io/) server in `mcp_service`. It uses the official [Python MCP SDK](https://py.sdk.modelcontextprotocol.io/) and exposes the existing `shared/tools` registry over stdio. The MCP adapter contains no ETL or RAG business logic: calls still flow through the agent service's bounded HTTP tool clients to the mounted ETL and RAG APIs.
+
+The server exposes these read-only tools:
+
+- `search_documents(query)`
+- `get_dataset_schema(run_id)`
+- `get_dataset_profile(run_id)`
+- `get_pipeline_status(run_id)`
+
+`run_id` may be `null` to select the latest ETL run. `query_dataset` is not exposed because the repository does not have a bounded row-query capability.
+
+```mermaid
+flowchart LR
+    User --> AgentAPI[Agent API]
+    AgentAPI --> Graph[LangGraph]
+    Graph --> OpenAI[OpenAI tool calling]
+    OpenAI --> Shared[Shared Tool Layer]
+
+    Client[MCP-compatible client] --> MCP[MCP stdio server]
+    MCP --> Shared
+
+    Shared --> ETL[ETL Service]
+    Shared --> RAG[RAG Service]
+```
+
+These are separate integration paths. The Agent API uses LangGraph and, when configured, OpenAI function calling to select tools. An MCP-compatible client performs protocol discovery and invocation directly through the MCP server. Both paths reuse the same typed application capabilities and sanitized execution results.
+
+### Start and verify locally
+
+Install the MCP dependency and ensure the ETL/RAG services are available at the configured URLs:
+
+```powershell
+python -m pip install -r mcp_service/requirements.txt
+$env:ETL_BASE_URL = "http://localhost:8000"
+$env:RAG_BASE_URL = "http://localhost:8001"
+python -m mcp_service.server
+```
+
+The last command starts a stdio protocol process, so it is normally launched by an MCP client rather than used interactively. The included demo starts that process, discovers all tools, and invokes `get_pipeline_status`:
+
+```powershell
+python -m mcp_service.demo_client
+python -m mcp_service.demo_client --run-id 1
+```
+
+Protocol startup, discovery, successful shared-tool invocation, invalid input, missing resources, and sanitized unexpected failures are **verified** by `tests/mcp`. The demo and tests do not use OpenAI or require an API key.
+
+### Client configuration examples
+
+The following commands are **configuration examples only**; client registration was not live-tested in this repository. Run them from the repository root after installing dependencies.
+
+Codex example, following the official [Codex MCP configuration](https://developers.openai.com/codex/mcp):
+
+```powershell
+codex mcp add etl-rag-observability `
+  --env ETL_BASE_URL=http://localhost:8000 `
+  --env RAG_BASE_URL=http://localhost:8001 `
+  -- python -m mcp_service.server
+codex mcp list
+```
+
+Claude Code example, following Anthropic's [Claude Code MCP documentation](https://docs.anthropic.com/en/docs/claude-code/mcp):
+
+```powershell
+claude mcp add etl-rag-observability `
+  --env ETL_BASE_URL=http://localhost:8000 `
+  --env RAG_BASE_URL=http://localhost:8001 `
+  -- python -m mcp_service.server
+claude mcp list
+```
+
+After connection, a client can discover `get_pipeline_status` and invoke it with `{"run_id": null}` for the latest run, or call `search_documents` with `{"query": "CPU embeddings"}`.
+
+### Security boundaries
+
+MCP arguments are validated by the SDK and again by the shared Pydantic schemas. Tools are bounded and read-only, service/network failures are converted to safe structured errors, and unexpected exceptions do not expose stack traces. The server provides no arbitrary SQL, shell execution, arbitrary filesystem access, or secret-returning tool. It does not read or return `OPENAI_API_KEY`.
+
+The server uses stdio because it is the smallest meaningful local transport. It is intentionally not added to Docker Compose as an idle network service; MCP clients launch it on demand while the existing application stack remains unchanged.
+
+---
+
 ## Project Status
 
 This is an ongoing personal project focused on backend engineering, data pipeline reliability, RAG observability, and agentic workflow orchestration.

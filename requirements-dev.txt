@@ -7,3 +7,4 @@ mypy
 requests
 playwright
 pytest-playwright
+-r mcp_service/requirements.txt
